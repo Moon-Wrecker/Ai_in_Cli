@@ -1,0 +1,62 @@
+{
+  "README.md": {
+    "hash": "baac933016a1c485691076ab97762592",
+    "processed_time": 1756015849.9359808,
+    "chunk_count": 1
+  },
+  "test.txt": {
+    "hash": "0b26e313ed4a7ca6904b0e9369e5b957",
+    "processed_time": 1756015849.936982,
+    "chunk_count": 1
+  },
+  "snake_game\\snake_game.py": {
+    "hash": "d80f4e495c2d729fe2dd5e8ded6998d2",
+    "processed_time": 1756015849.9379802,
+    "chunk_count": 1
+  },
+  ".rag_cache\\chunks.json": {
+    "hash": "5c8473922e887b313c00e8c6e144eef3",
+    "processed_time": 1756017139.2498298,
+    "chunk_count": 3
+  },
+  ".rag_cache\\file_index.json": {
+    "hash": "eaf2813b109ad244686db1902baf493e",
+    "processed_time": 1760452423.642941,
+    "chunk_count": 2
+  },
+  "my_new_directory\\my_new_file.txt": {
+    "hash": "2678384149298d127c3abca0a0aa03a9",
+    "processed_time": 1756015972.13717,
+    "chunk_count": 1
+  },
+  "ai_poem.txt": {
+    "hash": "d6c455efbbcbb43de2b46d00fd0ba624",
+    "processed_time": 1756016808.1968422,
+    "chunk_count": 1
+  },
+  "snake_game.py": {
+    "hash": "8fadc5f6b966528530c7fc5fbf3d8caa",
+    "processed_time": 1756017143.6620965,
+    "chunk_count": 1
+  },
+  "hello.py": {
+    "hash": "e976556478be64028459d3ea034aadd7",
+    "processed_time": 1756017162.3646479,
+    "chunk_count": 1
+  },
+  "robet_poem.txt": {
+    "hash": "e741b8ac492f2beee07a809d5516b666",
+    "processed_time": 1756017375.9472857,
+    "chunk_count": 1
+  },
+  "alpha\\tictactoe.py": {
+    "hash": "2a4dabcd14cded4a53e3b04ec2807464",
+    "processed_time": 1760451968.4981399,
+    "chunk_count": 1
+  },
+  "ayu_wayu\\main.py": {
+    "hash": "f6de972113f2bb2475b07a3b2ac7adc2",
+    "processed_time": 1760451968.4981399,
+    "chunk_count": 1
+  }
+}
