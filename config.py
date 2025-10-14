@@ -9,9 +9,9 @@ from pathlib import Path
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # LLM Configuration
-LLM_MODEL = "gemini-1.5-flash-latest"  # Updated to latest stable model
+LLM_MODEL = "gemini-1.5-flash"
 LLM_TEMPERATURE = 0.1
-MAX_ITERATIONS = 15
+MAX_ITERATIONS = 5
 
 # Memory Configuration
 MEMORY_WINDOW_SIZE = 10
