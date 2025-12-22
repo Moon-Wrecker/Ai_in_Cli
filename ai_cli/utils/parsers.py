@@ -1,5 +1,6 @@
 """
-Python code parsers for AST analysis and symbol extraction
+Multi-language code parsers for AST analysis and symbol extraction
+Supports Python (AST), JavaScript/TypeScript, HTML, CSS parsing
 Provides deep code understanding for intelligent indexing
 """
 
@@ -22,6 +23,45 @@ class SymbolType(Enum):
     CONSTANT = "constant"
     IMPORT = "import"
     DECORATOR = "decorator"
+    # JavaScript/TypeScript specific
+    ARROW_FUNCTION = "arrow_function"
+    INTERFACE = "interface"
+    TYPE_ALIAS = "type_alias"
+    ENUM = "enum"
+    # HTML specific
+    HTML_ELEMENT = "html_element"
+    HTML_COMPONENT = "html_component"
+    # CSS specific
+    CSS_SELECTOR = "css_selector"
+    CSS_CLASS = "css_class"
+    CSS_ID = "css_id"
+    CSS_VARIABLE = "css_variable"
+    CSS_KEYFRAMES = "css_keyframes"
+    CSS_MEDIA = "css_media"
+
+
+# Supported languages
+SUPPORTED_LANGUAGES = {
+    ".py": "python",
+    ".pyw": "python",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".scss": "scss",
+    ".sass": "sass",
+    ".less": "less",
+}
+
+
+def get_language(file_path: Path) -> str:
+    """Detect language from file extension"""
+    return SUPPORTED_LANGUAGES.get(file_path.suffix.lower(), "unknown")
 
 
 @dataclass
@@ -634,34 +674,757 @@ class CodeChunker:
         return chunks
 
 
+# =============================================================================
+# JavaScript/TypeScript Parser
+# =============================================================================
+
+class JavaScriptParser:
+    """
+    Regex-based JavaScript/TypeScript parser for symbol extraction.
+    Extracts functions, classes, interfaces, types, and variables.
+    """
+    
+    # Regex patterns for JS/TS constructs
+    PATTERNS = {
+        # Function declarations: function name(params) or async function name(params)
+        "function": re.compile(
+            r'^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)',
+            re.MULTILINE
+        ),
+        # Arrow functions: const name = (params) => or const name = async (params) =>
+        "arrow_function": re.compile(
+            r'^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
+            re.MULTILINE
+        ),
+        # Class declarations: class Name or class Name extends Parent
+        "class": re.compile(
+            r'^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+[\w,\s]+)?',
+            re.MULTILINE
+        ),
+        # Interface declarations (TypeScript)
+        "interface": re.compile(
+            r'^(?:export\s+)?interface\s+(\w+)(?:\s+extends\s+[\w,\s]+)?',
+            re.MULTILINE
+        ),
+        # Type aliases (TypeScript)
+        "type_alias": re.compile(
+            r'^(?:export\s+)?type\s+(\w+)\s*=',
+            re.MULTILINE
+        ),
+        # Enum declarations
+        "enum": re.compile(
+            r'^(?:export\s+)?(?:const\s+)?enum\s+(\w+)',
+            re.MULTILINE
+        ),
+        # ES6 imports
+        "import": re.compile(
+            r'^import\s+(?:{([^}]+)}|(\w+)|\*\s+as\s+(\w+))\s+from\s+[\'"]([^\'"]+)[\'"]',
+            re.MULTILINE
+        ),
+        # Require imports
+        "require": re.compile(
+            r'^(?:const|let|var)\s+(?:{([^}]+)}|(\w+))\s*=\s*require\([\'"]([^\'"]+)[\'"]\)',
+            re.MULTILINE
+        ),
+        # Constants (UPPER_CASE)
+        "constant": re.compile(
+            r'^(?:export\s+)?const\s+([A-Z][A-Z0-9_]+)\s*=',
+            re.MULTILINE
+        ),
+        # Method in class (simplified)
+        "method": re.compile(
+            r'^\s+(?:async\s+)?(\w+)\s*\([^)]*\)\s*{',
+            re.MULTILINE
+        ),
+    }
+    
+    def __init__(self):
+        self.current_file = ""
+        self.source_lines = []
+    
+    def parse_file(self, file_path: Path) -> ParseResult:
+        """Parse a JavaScript/TypeScript file"""
+        self.current_file = str(file_path)
+        result = ParseResult(file_path=self.current_file)
+        
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            self.source_lines = content.split("\n")
+            result.total_lines = len(self.source_lines)
+            result.code_lines = self._count_code_lines(content)
+            
+            # Extract imports
+            result.imports = self._extract_imports(content)
+            
+            # Extract symbols
+            result.symbols = self._extract_symbols(content)
+            
+        except Exception as e:
+            result.errors.append(f"Parse error: {str(e)}")
+        
+        return result
+    
+    def _count_code_lines(self, content: str) -> int:
+        """Count non-empty, non-comment lines"""
+        count = 0
+        in_multiline_comment = False
+        
+        for line in content.split("\n"):
+            stripped = line.strip()
+            
+            # Handle multiline comments
+            if "/*" in stripped:
+                in_multiline_comment = True
+            if "*/" in stripped:
+                in_multiline_comment = False
+                continue
+            
+            if in_multiline_comment:
+                continue
+            
+            # Skip empty lines and single-line comments
+            if not stripped or stripped.startswith("//"):
+                continue
+            
+            count += 1
+        
+        return count
+    
+    def _extract_imports(self, content: str) -> List[ImportInfo]:
+        """Extract import statements"""
+        imports = []
+        
+        # ES6 imports
+        for match in self.PATTERNS["import"].finditer(content):
+            named, default, namespace, module = match.groups()
+            names = []
+            if named:
+                names = [n.strip().split(" as ")[0] for n in named.split(",")]
+            elif default:
+                names = [default]
+            elif namespace:
+                names = [f"* as {namespace}"]
+            
+            imports.append(ImportInfo(
+                module=module,
+                names=names,
+                is_from_import=True,
+                line_number=content[:match.start()].count("\n") + 1,
+            ))
+        
+        # Require imports
+        for match in self.PATTERNS["require"].finditer(content):
+            named, default, module = match.groups()
+            names = []
+            if named:
+                names = [n.strip() for n in named.split(",")]
+            elif default:
+                names = [default]
+            
+            imports.append(ImportInfo(
+                module=module,
+                names=names,
+                is_from_import=False,
+                line_number=content[:match.start()].count("\n") + 1,
+            ))
+        
+        return imports
+    
+    def _extract_symbols(self, content: str) -> List[CodeSymbol]:
+        """Extract all symbols from JavaScript/TypeScript code"""
+        symbols = []
+        
+        # Functions
+        for match in self.PATTERNS["function"].finditer(content):
+            name = match.group(1)
+            params = match.group(2)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            is_async = "async" in content[max(0, match.start()-20):match.start()]
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.ASYNC_FUNCTION if is_async else SymbolType.FUNCTION,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=self._find_block_end(content, match.end()),
+                signature=f"function {name}({params})",
+                parameters=[p.strip() for p in params.split(",") if p.strip()],
+            ))
+        
+        # Arrow functions
+        for match in self.PATTERNS["arrow_function"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.ARROW_FUNCTION,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=self._find_block_end(content, match.end()),
+                signature=f"const {name} = () =>",
+            ))
+        
+        # Classes
+        for match in self.PATTERNS["class"].finditer(content):
+            name = match.group(1)
+            parent = match.group(2)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            signature = f"class {name}"
+            if parent:
+                signature += f" extends {parent}"
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.CLASS,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=self._find_block_end(content, match.end()),
+                signature=signature,
+                base_classes=[parent] if parent else [],
+            ))
+        
+        # Interfaces (TypeScript)
+        for match in self.PATTERNS["interface"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.INTERFACE,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=self._find_block_end(content, match.end()),
+                signature=f"interface {name}",
+            ))
+        
+        # Type aliases (TypeScript)
+        for match in self.PATTERNS["type_alias"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.TYPE_ALIAS,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"type {name}",
+            ))
+        
+        # Enums
+        for match in self.PATTERNS["enum"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.ENUM,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=self._find_block_end(content, match.end()),
+                signature=f"enum {name}",
+            ))
+        
+        # Constants
+        for match in self.PATTERNS["constant"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=name,
+                symbol_type=SymbolType.CONSTANT,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"const {name}",
+            ))
+        
+        return symbols
+    
+    def _find_block_end(self, content: str, start_pos: int) -> int:
+        """Find the end line of a code block (balanced braces)"""
+        brace_count = 0
+        in_string = False
+        string_char = None
+        line_num = content[:start_pos].count("\n") + 1
+        
+        i = start_pos
+        while i < len(content):
+            char = content[i]
+            
+            # Handle strings
+            if char in ('"', "'", '`') and (i == 0 or content[i-1] != '\\'):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+            
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return content[:i].count("\n") + 1
+                elif char == '\n':
+                    line_num += 1
+            
+            i += 1
+        
+        return line_num
+
+
+# =============================================================================
+# HTML Parser
+# =============================================================================
+
+class HTMLParser:
+    """
+    Regex-based HTML parser for structure extraction.
+    Extracts elements, components, scripts, and styles.
+    """
+    
+    PATTERNS = {
+        # HTML elements with id
+        "id_element": re.compile(r'<(\w+)[^>]*\sid=["\']([^"\']+)["\']', re.IGNORECASE),
+        # HTML elements with class
+        "class_element": re.compile(r'<(\w+)[^>]*\sclass=["\']([^"\']+)["\']', re.IGNORECASE),
+        # Custom components (PascalCase or kebab-case with dash)
+        "component": re.compile(r'<([A-Z][\w-]*|[\w]+-[\w-]+)[^>]*>', re.MULTILINE),
+        # Script tags
+        "script": re.compile(r'<script([^>]*)>(.*?)</script>', re.IGNORECASE | re.DOTALL),
+        # Style tags
+        "style": re.compile(r'<style([^>]*)>(.*?)</style>', re.IGNORECASE | re.DOTALL),
+        # Link tags (for CSS)
+        "link": re.compile(r'<link[^>]*href=["\']([^"\']+\.css)["\'][^>]*>', re.IGNORECASE),
+        # Meta tags
+        "meta": re.compile(r'<meta[^>]*name=["\']([^"\']+)["\'][^>]*content=["\']([^"\']+)["\']', re.IGNORECASE),
+        # Forms
+        "form": re.compile(r'<form[^>]*(?:id=["\']([^"\']+)["\'])?[^>]*(?:action=["\']([^"\']+)["\'])?', re.IGNORECASE),
+    }
+    
+    def __init__(self):
+        self.current_file = ""
+    
+    def parse_file(self, file_path: Path) -> ParseResult:
+        """Parse an HTML file"""
+        self.current_file = str(file_path)
+        result = ParseResult(file_path=self.current_file)
+        
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            result.total_lines = content.count("\n") + 1
+            result.code_lines = len([l for l in content.split("\n") if l.strip()])
+            
+            result.symbols = self._extract_symbols(content)
+            result.imports = self._extract_imports(content)
+            
+        except Exception as e:
+            result.errors.append(f"Parse error: {str(e)}")
+        
+        return result
+    
+    def _extract_imports(self, content: str) -> List[ImportInfo]:
+        """Extract linked resources (CSS, JS)"""
+        imports = []
+        
+        # CSS links
+        for match in self.PATTERNS["link"].finditer(content):
+            href = match.group(1)
+            imports.append(ImportInfo(
+                module=href,
+                names=["stylesheet"],
+                is_from_import=True,
+                line_number=content[:match.start()].count("\n") + 1,
+            ))
+        
+        # Script sources
+        for match in re.finditer(r'<script[^>]*src=["\']([^"\']+)["\']', content, re.IGNORECASE):
+            src = match.group(1)
+            imports.append(ImportInfo(
+                module=src,
+                names=["script"],
+                is_from_import=True,
+                line_number=content[:match.start()].count("\n") + 1,
+            ))
+        
+        return imports
+    
+    def _extract_symbols(self, content: str) -> List[CodeSymbol]:
+        """Extract symbols from HTML"""
+        symbols = []
+        
+        # Elements with IDs
+        for match in self.PATTERNS["id_element"].finditer(content):
+            tag, id_value = match.groups()
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"#{id_value}",
+                symbol_type=SymbolType.HTML_ELEMENT,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"<{tag} id=\"{id_value}\">",
+            ))
+        
+        # Elements with classes (unique classes only)
+        seen_classes = set()
+        for match in self.PATTERNS["class_element"].finditer(content):
+            tag, class_value = match.groups()
+            line_num = content[:match.start()].count("\n") + 1
+            
+            for cls in class_value.split():
+                if cls not in seen_classes:
+                    seen_classes.add(cls)
+                    symbols.append(CodeSymbol(
+                        name=f".{cls}",
+                        symbol_type=SymbolType.CSS_CLASS,
+                        file_path=self.current_file,
+                        line_start=line_num,
+                        line_end=line_num,
+                        signature=f"<{tag} class=\"{cls}\">",
+                    ))
+        
+        # Custom components
+        seen_components = set()
+        for match in self.PATTERNS["component"].finditer(content):
+            component = match.group(1)
+            if component not in seen_components and not component.lower() in [
+                "div", "span", "p", "a", "img", "ul", "li", "h1", "h2", "h3", "h4", "h5", "h6",
+                "table", "tr", "td", "th", "form", "input", "button", "select", "option",
+                "header", "footer", "nav", "section", "article", "aside", "main"
+            ]:
+                seen_components.add(component)
+                line_num = content[:match.start()].count("\n") + 1
+                
+                symbols.append(CodeSymbol(
+                    name=component,
+                    symbol_type=SymbolType.HTML_COMPONENT,
+                    file_path=self.current_file,
+                    line_start=line_num,
+                    line_end=line_num,
+                    signature=f"<{component}>",
+                ))
+        
+        # Forms
+        for match in self.PATTERNS["form"].finditer(content):
+            form_id, action = match.groups()
+            line_num = content[:match.start()].count("\n") + 1
+            
+            name = form_id or action or "form"
+            symbols.append(CodeSymbol(
+                name=f"form:{name}",
+                symbol_type=SymbolType.HTML_ELEMENT,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"<form id=\"{form_id or ''}\" action=\"{action or ''}\">",
+            ))
+        
+        return symbols
+
+
+# =============================================================================
+# CSS Parser
+# =============================================================================
+
+class CSSParser:
+    """
+    Regex-based CSS parser for selector and variable extraction.
+    Supports CSS, SCSS, and LESS basics.
+    """
+    
+    PATTERNS = {
+        # Class selectors
+        "class": re.compile(r'\.([a-zA-Z_][\w-]*)\s*[{,:]', re.MULTILINE),
+        # ID selectors
+        "id": re.compile(r'#([a-zA-Z_][\w-]*)\s*[{,:]', re.MULTILINE),
+        # CSS custom properties (variables)
+        "variable": re.compile(r'--([a-zA-Z_][\w-]*)\s*:', re.MULTILINE),
+        # @keyframes
+        "keyframes": re.compile(r'@keyframes\s+([\w-]+)', re.MULTILINE),
+        # @media queries
+        "media": re.compile(r'@media\s+([^{]+)', re.MULTILINE),
+        # @import
+        "import": re.compile(r'@import\s+["\']([^"\']+)["\']', re.MULTILINE),
+        # SCSS/LESS mixins
+        "mixin": re.compile(r'@mixin\s+([\w-]+)', re.MULTILINE),
+        # SCSS/LESS variables
+        "scss_variable": re.compile(r'\$([a-zA-Z_][\w-]*)\s*:', re.MULTILINE),
+    }
+    
+    def __init__(self):
+        self.current_file = ""
+    
+    def parse_file(self, file_path: Path) -> ParseResult:
+        """Parse a CSS/SCSS/LESS file"""
+        self.current_file = str(file_path)
+        result = ParseResult(file_path=self.current_file)
+        
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            result.total_lines = content.count("\n") + 1
+            result.code_lines = len([l for l in content.split("\n") if l.strip() and not l.strip().startswith("//")])
+            
+            result.symbols = self._extract_symbols(content)
+            result.imports = self._extract_imports(content)
+            
+        except Exception as e:
+            result.errors.append(f"Parse error: {str(e)}")
+        
+        return result
+    
+    def _extract_imports(self, content: str) -> List[ImportInfo]:
+        """Extract @import statements"""
+        imports = []
+        
+        for match in self.PATTERNS["import"].finditer(content):
+            path = match.group(1)
+            imports.append(ImportInfo(
+                module=path,
+                names=["*"],
+                is_from_import=True,
+                line_number=content[:match.start()].count("\n") + 1,
+            ))
+        
+        return imports
+    
+    def _extract_symbols(self, content: str) -> List[CodeSymbol]:
+        """Extract CSS symbols"""
+        symbols = []
+        
+        # Classes (unique)
+        seen_classes = set()
+        for match in self.PATTERNS["class"].finditer(content):
+            cls = match.group(1)
+            if cls not in seen_classes:
+                seen_classes.add(cls)
+                line_num = content[:match.start()].count("\n") + 1
+                
+                symbols.append(CodeSymbol(
+                    name=f".{cls}",
+                    symbol_type=SymbolType.CSS_CLASS,
+                    file_path=self.current_file,
+                    line_start=line_num,
+                    line_end=line_num,
+                    signature=f".{cls} {{ }}",
+                ))
+        
+        # IDs (unique)
+        seen_ids = set()
+        for match in self.PATTERNS["id"].finditer(content):
+            id_val = match.group(1)
+            if id_val not in seen_ids:
+                seen_ids.add(id_val)
+                line_num = content[:match.start()].count("\n") + 1
+                
+                symbols.append(CodeSymbol(
+                    name=f"#{id_val}",
+                    symbol_type=SymbolType.CSS_ID,
+                    file_path=self.current_file,
+                    line_start=line_num,
+                    line_end=line_num,
+                    signature=f"#{id_val} {{ }}",
+                ))
+        
+        # CSS Variables
+        for match in self.PATTERNS["variable"].finditer(content):
+            var_name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"--{var_name}",
+                symbol_type=SymbolType.CSS_VARIABLE,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"--{var_name}: value;",
+            ))
+        
+        # SCSS/LESS variables
+        for match in self.PATTERNS["scss_variable"].finditer(content):
+            var_name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"${var_name}",
+                symbol_type=SymbolType.CSS_VARIABLE,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"${var_name}: value;",
+            ))
+        
+        # Keyframes
+        for match in self.PATTERNS["keyframes"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"@keyframes {name}",
+                symbol_type=SymbolType.CSS_KEYFRAMES,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"@keyframes {name} {{ }}",
+            ))
+        
+        # Media queries (simplified)
+        for match in self.PATTERNS["media"].finditer(content):
+            query = match.group(1).strip()[:50]  # Truncate long queries
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"@media {query}",
+                symbol_type=SymbolType.CSS_MEDIA,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"@media {query} {{ }}",
+            ))
+        
+        # Mixins
+        for match in self.PATTERNS["mixin"].finditer(content):
+            name = match.group(1)
+            line_num = content[:match.start()].count("\n") + 1
+            
+            symbols.append(CodeSymbol(
+                name=f"@mixin {name}",
+                symbol_type=SymbolType.FUNCTION,
+                file_path=self.current_file,
+                line_start=line_num,
+                line_end=line_num,
+                signature=f"@mixin {name}() {{ }}",
+            ))
+        
+        return symbols
+
+
+# =============================================================================
+# Multi-Language Parser (Unified Interface)
+# =============================================================================
+
+class MultiLanguageParser:
+    """
+    Unified parser that automatically selects the right parser based on file extension.
+    Supports Python, JavaScript, TypeScript, HTML, and CSS.
+    """
+    
+    def __init__(self):
+        self.python_parser = PythonASTParser()
+        self.js_parser = JavaScriptParser()
+        self.html_parser = HTMLParser()
+        self.css_parser = CSSParser()
+        self.chunker = CodeChunker()
+    
+    def parse_file(self, file_path: Path) -> ParseResult:
+        """Parse any supported file type"""
+        language = get_language(file_path)
+        
+        if language == "python":
+            return self.python_parser.parse_file(file_path)
+        elif language in ("javascript", "typescript"):
+            return self.js_parser.parse_file(file_path)
+        elif language == "html":
+            return self.html_parser.parse_file(file_path)
+        elif language in ("css", "scss", "sass", "less"):
+            return self.css_parser.parse_file(file_path)
+        else:
+            # Return basic result for unsupported files
+            return self._parse_unknown(file_path)
+    
+    def _parse_unknown(self, file_path: Path) -> ParseResult:
+        """Basic parsing for unknown file types"""
+        result = ParseResult(file_path=str(file_path))
+        
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            result.total_lines = content.count("\n") + 1
+            result.code_lines = len([l for l in content.split("\n") if l.strip()])
+        except Exception as e:
+            result.errors.append(f"Could not read file: {e}")
+        
+        return result
+    
+    def chunk_file(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Chunk any supported file type"""
+        language = get_language(file_path)
+        
+        if language == "python":
+            return self.chunker.chunk_file(file_path)
+        else:
+            # For non-Python, use simple chunking
+            return self.chunker._simple_chunk(
+                file_path.read_text(encoding="utf-8"),
+                str(file_path)
+            )
+    
+    def get_file_structure(self, file_path: Path) -> Dict[str, Any]:
+        """Get structured overview of any supported file"""
+        result = self.parse_file(file_path)
+        language = get_language(file_path)
+        
+        structure = {
+            "file": str(file_path),
+            "language": language,
+            "lines": result.total_lines,
+            "code_lines": result.code_lines,
+            "imports": len(result.imports),
+            "symbols": len(result.symbols),
+            "errors": result.errors,
+        }
+        
+        # Add language-specific details
+        if language == "python":
+            structure["classes"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.CLASS]
+            structure["functions"] = [s.name for s in result.symbols if s.symbol_type in (SymbolType.FUNCTION, SymbolType.ASYNC_FUNCTION)]
+        elif language in ("javascript", "typescript"):
+            structure["classes"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.CLASS]
+            structure["functions"] = [s.name for s in result.symbols if s.symbol_type in (SymbolType.FUNCTION, SymbolType.ARROW_FUNCTION)]
+            structure["interfaces"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.INTERFACE]
+            structure["types"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.TYPE_ALIAS]
+        elif language == "html":
+            structure["components"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.HTML_COMPONENT]
+            structure["ids"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.HTML_ELEMENT]
+        elif language in ("css", "scss", "sass", "less"):
+            structure["classes"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.CSS_CLASS]
+            structure["ids"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.CSS_ID]
+            structure["variables"] = [s.name for s in result.symbols if s.symbol_type == SymbolType.CSS_VARIABLE]
+        
+        return structure
+
+
+# =============================================================================
 # Convenience functions
+# =============================================================================
+
 def parse_python_file(file_path: Path) -> ParseResult:
     """Parse a Python file and return results"""
     parser = PythonASTParser()
     return parser.parse_file(file_path)
 
 
+def parse_file(file_path: Path) -> ParseResult:
+    """Parse any supported file type"""
+    parser = MultiLanguageParser()
+    return parser.parse_file(file_path)
+
+
 def extract_symbols(file_path: Path) -> List[CodeSymbol]:
-    """Extract all symbols from a Python file"""
-    result = parse_python_file(file_path)
+    """Extract all symbols from any supported file"""
+    result = parse_file(file_path)
     return result.symbols
 
 
 def get_file_structure(file_path: Path) -> Dict[str, Any]:
-    """Get a structured overview of a Python file"""
-    result = parse_python_file(file_path)
-    
-    return {
-        "file": str(file_path),
-        "lines": result.total_lines,
-        "code_lines": result.code_lines,
-        "docstring": result.module_docstring,
-        "imports": len(result.imports),
-        "classes": [s.name for s in result.symbols if s.symbol_type == SymbolType.CLASS],
-        "functions": [s.name for s in result.symbols if s.symbol_type in (SymbolType.FUNCTION, SymbolType.ASYNC_FUNCTION)],
-        "exports": result.exports,
-        "errors": result.errors,
-    }
+    """Get a structured overview of any supported file"""
+    parser = MultiLanguageParser()
+    return parser.get_file_structure(file_path)
 
 
 

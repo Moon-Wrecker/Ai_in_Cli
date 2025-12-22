@@ -1,5 +1,6 @@
 """
-AST Indexer - Symbol-aware code indexing using Python AST
+Multi-Language AST Indexer - Symbol-aware code indexing
+Supports Python (AST), JavaScript, TypeScript, HTML, CSS
 Provides deep code understanding through structural analysis
 """
 
@@ -15,10 +16,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import get_settings, get_sandbox_path
 from utils.parsers import (
     PythonASTParser,
+    JavaScriptParser,
+    HTMLParser,
+    CSSParser,
+    MultiLanguageParser,
     CodeChunker,
     ParseResult,
     CodeSymbol,
     SymbolType,
+    get_language,
+    SUPPORTED_LANGUAGES,
 )
 from storage.graph_store import (
     DependencyGraph,
@@ -57,7 +64,8 @@ class IndexStats:
 
 class ASTIndexer:
     """
-    Indexes Python code using AST analysis.
+    Multi-language code indexer.
+    Supports Python (AST), JavaScript, TypeScript, HTML, and CSS.
     Extracts symbols, builds dependency graphs, and creates semantic chunks.
     """
     
@@ -70,7 +78,15 @@ class ASTIndexer:
         self.graph = graph or get_dependency_graph()
         self.settings = get_settings()
         
-        self.parser = PythonASTParser()
+        # Multi-language parser
+        self.multi_parser = MultiLanguageParser()
+        
+        # Language-specific parsers (for direct access if needed)
+        self.python_parser = PythonASTParser()
+        self.js_parser = JavaScriptParser()
+        self.html_parser = HTMLParser()
+        self.css_parser = CSSParser()
+        
         self.chunker = CodeChunker(
             chunk_size=self.settings.chunk_size,
             overlap=self.settings.chunk_overlap,
@@ -78,10 +94,14 @@ class ASTIndexer:
         
         # Track what's been indexed
         self.indexed_files: Set[str] = set()
+        
+        # Supported extensions for indexing
+        self.indexable_extensions = set(SUPPORTED_LANGUAGES.keys())
     
     def index_workspace(self, force: bool = False) -> IndexStats:
         """
-        Index all Python files in the sandbox workspace.
+        Index all supported files in the sandbox workspace.
+        Supports: Python, JavaScript, TypeScript, HTML, CSS
         
         Args:
             force: If True, re-index all files even if already indexed
@@ -92,10 +112,10 @@ class ASTIndexer:
         start_time = time.time()
         stats = IndexStats()
         
-        # Find all Python files
-        python_files = self._find_python_files()
+        # Find all indexable files (multi-language)
+        files_to_index = self._find_indexable_files()
         
-        for file_path in python_files:
+        for file_path in files_to_index:
             try:
                 # Check if already indexed
                 if not force and self.graph.is_file_indexed(str(file_path)):
@@ -122,13 +142,16 @@ class ASTIndexer:
     
     def index_file(self, file_path: Path) -> Dict[str, Any]:
         """
-        Index a single Python file.
+        Index a single file (multi-language support).
+        
+        Supports: Python, JavaScript, TypeScript, HTML, CSS
         
         Returns:
             Dictionary with indexing results
         """
         result = {
             "file": str(file_path),
+            "language": get_language(file_path),
             "symbols": 0,
             "chunks": 0,
             "errors": [],
@@ -137,14 +160,14 @@ class ASTIndexer:
         # Remove existing data for this file (re-index)
         self.graph.remove_file(str(file_path))
         
-        # Parse the file
-        parse_result = self.parser.parse_file(file_path)
+        # Parse the file using multi-language parser
+        parse_result = self.multi_parser.parse_file(file_path)
         
         if parse_result.errors:
             result["errors"] = parse_result.errors
-            return result
+            # Don't return early - still try to index what we can
         
-        # Create module node
+        # Create module/file node
         module_id = self._get_module_id(file_path)
         module_node = GraphNode(
             id=module_id,
@@ -153,6 +176,7 @@ class ASTIndexer:
             file_path=str(file_path),
             line_number=1,
             docstring=parse_result.module_docstring,
+            metadata={"language": result["language"]},
         )
         self.graph.add_node(module_node)
         
@@ -169,14 +193,14 @@ class ASTIndexer:
         self.indexed_files.add(str(file_path))
         
         # Create chunks for semantic search
-        chunks = self.chunker.chunk_file(file_path)
+        chunks = self.multi_parser.chunk_file(file_path)
         result["chunks"] = len(chunks)
         
         return result
     
-    def _find_python_files(self) -> List[Path]:
-        """Find all Python files in sandbox"""
-        python_files = []
+    def _find_indexable_files(self) -> List[Path]:
+        """Find all indexable files in sandbox (multi-language)"""
+        indexable_files = []
         ignore_patterns = self.settings.ignore_patterns
         
         for root, dirs, files in os.walk(self.sandbox_path):
@@ -190,18 +214,25 @@ class ASTIndexer:
             ]
             
             for file in files:
-                if file.endswith(".py"):
-                    file_path = Path(root) / file
-                    
-                    # Check file size
-                    try:
-                        size_mb = file_path.stat().st_size / (1024 * 1024)
-                        if size_mb <= self.settings.max_file_size_mb:
-                            python_files.append(file_path)
-                    except:
-                        pass
+                file_path = Path(root) / file
+                
+                # Check if extension is supported
+                if file_path.suffix.lower() not in self.indexable_extensions:
+                    continue
+                
+                # Check file size
+                try:
+                    size_mb = file_path.stat().st_size / (1024 * 1024)
+                    if size_mb <= self.settings.max_file_size_mb:
+                        indexable_files.append(file_path)
+                except:
+                    pass
         
-        return python_files
+        return indexable_files
+    
+    def _find_python_files(self) -> List[Path]:
+        """Find all Python files in sandbox (backwards compatibility)"""
+        return [f for f in self._find_indexable_files() if f.suffix == ".py"]
     
     def _get_module_id(self, file_path: Path) -> str:
         """Generate module ID from file path"""
@@ -229,14 +260,30 @@ class ASTIndexer:
         else:
             symbol_id = f"{module_id}.{symbol.name}"
         
-        # Map symbol type to node type
+        # Map symbol type to node type (extended for multi-language)
         node_type_map = {
+            # Python
             SymbolType.CLASS: NodeType.CLASS,
             SymbolType.FUNCTION: NodeType.FUNCTION,
             SymbolType.ASYNC_FUNCTION: NodeType.FUNCTION,
             SymbolType.METHOD: NodeType.METHOD,
             SymbolType.VARIABLE: NodeType.VARIABLE,
             SymbolType.CONSTANT: NodeType.VARIABLE,
+            # JavaScript/TypeScript
+            SymbolType.ARROW_FUNCTION: NodeType.FUNCTION,
+            SymbolType.INTERFACE: NodeType.CLASS,  # Treat interfaces like classes
+            SymbolType.TYPE_ALIAS: NodeType.VARIABLE,
+            SymbolType.ENUM: NodeType.CLASS,
+            # HTML
+            SymbolType.HTML_ELEMENT: NodeType.VARIABLE,
+            SymbolType.HTML_COMPONENT: NodeType.CLASS,  # Components are like classes
+            # CSS
+            SymbolType.CSS_SELECTOR: NodeType.VARIABLE,
+            SymbolType.CSS_CLASS: NodeType.VARIABLE,
+            SymbolType.CSS_ID: NodeType.VARIABLE,
+            SymbolType.CSS_VARIABLE: NodeType.VARIABLE,
+            SymbolType.CSS_KEYFRAMES: NodeType.FUNCTION,
+            SymbolType.CSS_MEDIA: NodeType.VARIABLE,
         }
         node_type = node_type_map.get(symbol.symbol_type, NodeType.VARIABLE)
         
@@ -348,39 +395,26 @@ class ASTIndexer:
         return name
     
     def get_file_symbols(self, file_path: Path) -> List[CodeSymbol]:
-        """Get all symbols from a file"""
-        result = self.parser.parse_file(file_path)
+        """Get all symbols from a file (multi-language)"""
+        result = self.multi_parser.parse_file(file_path)
         return result.symbols
     
     def get_file_structure(self, file_path: Path) -> Dict[str, Any]:
-        """Get structured overview of a file"""
-        result = self.parser.parse_file(file_path)
-        
-        return {
-            "file": str(file_path),
-            "module_docstring": result.module_docstring,
-            "total_lines": result.total_lines,
-            "code_lines": result.code_lines,
-            "imports": [i.to_dict() for i in result.imports],
-            "exports": result.exports,
-            "classes": [
-                s.to_dict() for s in result.symbols
-                if s.symbol_type == SymbolType.CLASS
-            ],
-            "functions": [
-                s.to_dict() for s in result.symbols
-                if s.symbol_type in (SymbolType.FUNCTION, SymbolType.ASYNC_FUNCTION)
-            ],
-            "variables": [
-                s.to_dict() for s in result.symbols
-                if s.symbol_type in (SymbolType.VARIABLE, SymbolType.CONSTANT)
-            ],
-            "errors": result.errors,
-        }
+        """Get structured overview of a file (multi-language)"""
+        return self.multi_parser.get_file_structure(file_path)
     
     def get_chunks(self, file_path: Path) -> List[Dict[str, Any]]:
-        """Get semantic chunks for a file"""
-        return self.chunker.chunk_file(file_path)
+        """Get semantic chunks for a file (multi-language)"""
+        return self.multi_parser.chunk_file(file_path)
+    
+    def get_supported_languages(self) -> Dict[str, List[str]]:
+        """Get list of supported languages and their extensions"""
+        languages = {}
+        for ext, lang in SUPPORTED_LANGUAGES.items():
+            if lang not in languages:
+                languages[lang] = []
+            languages[lang].append(ext)
+        return languages
 
 
 # Convenience function
