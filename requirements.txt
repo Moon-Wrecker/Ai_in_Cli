@@ -1,13 +1,22 @@
-# Updated compatible versions for LangChain with OpenAI
-langchain==0.3.15
-langchain-openai==0.2.14
-langchain-community==0.3.15
-langchain-core>=0.3.31
-openai==1.59.6
-chromadb==0.5.23
-python-dotenv==1.0.1
-rich==13.9.4
-textual==0.88.1
-typer==0.15.2
-pydantic==2.10.6
-tiktoken==0.8.0
+# AI CLI v2.0 - LangChain-Free Implementation
+# Pure OpenAI function calling with advanced indexing
+
+# Core AI
+openai>=1.50.0
+
+# Vector Database
+chromadb>=0.5.0
+
+# Graph & Data Structures (for dependency analysis)
+networkx>=3.2
+
+# Terminal UI
+rich>=13.9.0
+
+# Environment & Config
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utilities
+tiktoken>=0.7.0

@@ -1,1 +1,0 @@
-from textual.app import App\nfrom textual.widgets import Static\n\nclass HelloWorldApp(App):\n    def compose(self):\n        yield Static("Hello, World!", style="bold magenta")\n\nif __name__ == "__main__":\n    HelloWorldApp().run()

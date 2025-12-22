@@ -3,12 +3,37 @@ ChromaDB Vector Store for semantic search
 Provides in-memory and persistent vector storage with OpenAI embeddings
 """
 
+import os
 import hashlib
 import time
+import warnings
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 import json
+
+# Suppress ChromaDB telemetry errors BEFORE any chromadb imports
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_TELEMETRY"] = "False"
+os.environ["POSTHOG_DISABLED"] = "1"
+warnings.filterwarnings("ignore", message=".*telemetry.*")
+
+# Create a mock posthog module to prevent telemetry completely
+class MockPosthog:
+    def __init__(self, *args, **kwargs): pass
+    def capture(self, *args, **kwargs): pass
+    def identify(self, *args, **kwargs): pass
+    def alias(self, *args, **kwargs): pass
+    def set(self, *args, **kwargs): pass
+    def group(self, *args, **kwargs): pass
+    def feature_enabled(self, *args, **kwargs): return False
+    def shutdown(self, *args, **kwargs): pass
+    api_key = None
+    disabled = True
+
+# Patch posthog before chromadb imports it
+sys.modules['posthog'] = MockPosthog()
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings

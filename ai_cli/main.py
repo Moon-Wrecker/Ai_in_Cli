@@ -8,8 +8,38 @@ import os
 import sys
 import signal
 import argparse
+import warnings
 from pathlib import Path
 from typing import Optional
+
+# ============================================================================
+# SILENCE CHROMADB TELEMETRY - Must happen BEFORE any chromadb imports
+# ============================================================================
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_TELEMETRY"] = "False"
+os.environ["POSTHOG_DISABLED"] = "1"
+
+# Mock posthog to prevent telemetry errors completely
+class _MockPosthog:
+    """Mock posthog to suppress all telemetry calls"""
+    def __init__(self, *args, **kwargs): pass
+    def capture(self, *args, **kwargs): pass
+    def identify(self, *args, **kwargs): pass
+    def alias(self, *args, **kwargs): pass
+    def set(self, *args, **kwargs): pass
+    def group(self, *args, **kwargs): pass
+    def feature_enabled(self, *args, **kwargs): return False
+    def shutdown(self, *args, **kwargs): pass
+    api_key = None
+    disabled = True
+
+sys.modules['posthog'] = _MockPosthog()
+
+# Suppress warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*telemetry.*")
+warnings.filterwarnings("ignore", message=".*posthog.*")
+# ============================================================================
 
 # Ensure proper imports
 sys.path.insert(0, str(Path(__file__).parent))
