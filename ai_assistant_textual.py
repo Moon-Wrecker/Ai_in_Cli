@@ -3,7 +3,7 @@
 🤖 AI in CLI - Beautiful AI-Powered File Assistant
 
 A stunning terminal application with RAG capabilities, smart file editing,
-and workspace awareness powered by Google Gemini AI.
+and workspace awareness powered by OpenAI.
 """
 
 import os
@@ -18,7 +18,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # LangChain imports
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.agents import Tool, AgentExecutor, create_react_agent
 from langchain.prompts import PromptTemplate
@@ -242,15 +242,12 @@ class AIAssistantWidget(Static):
             self.terminal_manager = TerminalManager(safe_mode=True)
             
             # Setup LLM
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables")
+                raise ValueError("OPENAI_API_KEY not found in environment variables")
                 
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=api_key,
-                temperature=0.1
-            )
+            # ChatOpenAI reads OPENAI_API_KEY from env automatically
+            self.llm = ChatOpenAI(model=config.LLM_MODEL, temperature=config.LLM_TEMPERATURE)
             
             # Setup memory
             self.memory = ConversationBufferWindowMemory(
@@ -638,7 +635,7 @@ class AIFileAssistantApp(App):
         yield Header()
         
         # Title
-        yield Static("🤖 AI FILE ASSISTANT\nPowered by Google Gemini & RAG", id="title")
+        yield Static("🤖 AI FILE ASSISTANT\nPowered by OpenAI & RAG", id="title")
         
         with Container(classes="main-container"):
             # Sidebar

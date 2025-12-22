@@ -1,0 +1,29 @@
+# AI CLI - Minimal Dependencies (No LangChain)
+# Core AI
+openai>=1.50.0
+
+# Vector Database
+chromadb>=0.5.0
+
+# Graph & Data Structures
+networkx>=3.2
+
+# Terminal UI
+rich>=13.9.0
+textual>=0.80.0
+
+# CLI Framework
+typer>=0.12.0
+click>=8.1.0
+
+# Environment & Config
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utilities
+tiktoken>=0.7.0
+regex>=2024.0.0
+
+# Optional: For better async
+aiofiles>=24.0.0

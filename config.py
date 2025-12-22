@@ -6,12 +6,13 @@ import os
 from pathlib import Path
 
 # API Configuration
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # LLM Configuration
-LLM_MODEL = "gemini-1.5-flash"
+# NOTE: OpenAI model names can evolve; this repo defaults to a stable, high-quality option.
+LLM_MODEL = "gpt-4o"
 LLM_TEMPERATURE = 0.1
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 30
 
 # Memory Configuration
 MEMORY_WINDOW_SIZE = 10

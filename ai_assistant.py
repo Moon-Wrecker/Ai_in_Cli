@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 
 # LangChain imports
 from langchain.schema import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.tools import Tool
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.prompts import PromptTemplate
@@ -77,18 +77,15 @@ class AIFileAssistant:
         self.setup_agent()
         
     def setup_llm(self):
-        """Initialize the Gemini LLM"""
-        api_key = os.getenv("GOOGLE_API_KEY")
+        """Initialize the OpenAI LLM"""
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            self.console.print("❌ GOOGLE_API_KEY not found", style="red")
-            self.console.print("Set in .env file: GOOGLE_API_KEY=your_key", style="yellow")
+            self.console.print("❌ OPENAI_API_KEY not found", style="red")
+            self.console.print("Set in .env file: OPENAI_API_KEY=your_key", style="yellow")
             sys.exit(1)
             
-        self.llm = ChatGoogleGenerativeAI(
-            model=config.LLM_MODEL,
-            google_api_key=api_key,
-            temperature=config.LLM_TEMPERATURE
-        )
+        # ChatOpenAI will read OPENAI_API_KEY from the environment automatically.
+        self.llm = ChatOpenAI(model=config.LLM_MODEL, temperature=config.LLM_TEMPERATURE)
         
     def setup_memory(self):
         """Initialize conversation memory"""
@@ -648,7 +645,7 @@ Question: {{input}}
         """Run the interactive terminal session"""
         self.console.print(Panel.fit(
             "🤖 AI Assistant",
-            subtitle="Gemini Flash + RAG",
+            subtitle="OpenAI + RAG",
             style="bold orange1",
             border_style="orange1"
         ))
@@ -747,10 +744,10 @@ def setup():
     env_path = Path(".env")
     if not env_path.exists():
         console.print("📝 Creating .env file...", style="yellow")
-        api_key = Prompt.ask("Enter your Google API Key")
+        api_key = Prompt.ask("Enter your OpenAI API Key")
         
         with open(".env", "w") as f:
-            f.write(f"GOOGLE_API_KEY={api_key}\n")
+            f.write(f"OPENAI_API_KEY={api_key}\n")
             
         console.print(" .env file created!", style="green")
     else:
@@ -759,13 +756,10 @@ def setup():
     # Test API connection
     try:
         load_dotenv()
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=api_key
-            )
-            response = llm.invoke([HumanMessage(content="Say 'API connection successful'")])
+            llm = ChatOpenAI(model=config.LLM_MODEL, temperature=0)
+            _ = llm.invoke([HumanMessage(content="Say exactly: API connection successful")])
             console.print(" API connection test successful!", style="green")
         else:
             console.print(" No API key found", style="red")
