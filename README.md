@@ -282,13 +282,13 @@ sandbox/styles/main.css
 
 ## 🌐 Supported Languages
 
-| Language | Parsing | Writing | Features |
-|:--------:|:-------:|:-------:|----------|
-| 🐍 Python | ✅ AST | ✅ | Classes, functions, imports, decorators |
-| 📜 JavaScript | ✅ Regex | ✅ | Functions, classes, arrow functions |
-| 📘 TypeScript | ✅ Regex | ✅ | + Interfaces, types, enums |
-| 🌐 HTML | ✅ Regex | ✅ | Tags, IDs, classes, components |
-| 🎨 CSS/SCSS | ✅ Regex | ✅ | Selectors, variables, keyframes |
+| Language | Writing | Features |
+|:--------:|:-------:|----------|
+| 🐍 Python | ✅ | Classes, functions, imports, decorators |
+| 📜 JavaScript | ✅ | Functions, classes, arrow functions |
+| 📘 TypeScript | ✅ | + Interfaces, types, enums |
+| 🌐 HTML | ✅ | Tags, IDs, classes, components |
+| 🎨 CSS/SCSS | ✅ | Selectors, variables, keyframes |
 
 ---
 
