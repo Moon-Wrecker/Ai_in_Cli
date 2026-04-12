@@ -43,7 +43,13 @@ class WorkspaceRAG:
     
     def __init__(self, workspace_dir: str, persist_dir: str = None):
         self.workspace_dir = Path(workspace_dir).resolve()
-        self.persist_dir = Path(persist_dir) if persist_dir else (self.workspace_dir / ".rag_cache")
+        # Store RAG cache OUTSIDE workspace (in project root)
+        if persist_dir:
+            self.persist_dir = Path(persist_dir)
+        else:
+            # Default: project root .rag_cache, NOT workspace
+            from config import RAG_CACHE_DIR
+            self.persist_dir = RAG_CACHE_DIR
         self.persist_dir.mkdir(exist_ok=True)
         
         self.index_file = self.persist_dir / "file_index.json"

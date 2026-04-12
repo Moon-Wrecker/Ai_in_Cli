@@ -6,15 +6,16 @@ import os
 from pathlib import Path
 
 # API Configuration
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# LLM Configuration
-LLM_MODEL = "gemini-1.5-flash"
-LLM_TEMPERATURE = 0.1
-MAX_ITERATIONS = 5
+# LLM Configuration - Using OpenAI
+LLM_MODEL = "gpt-4o-2024-08-06"  # Optimized for tool/function calling
+LLM_TEMPERATURE = 0.1  # Lower = more deterministic, higher = more creative
+MAX_ITERATIONS = 20  # Allow complex multi-step operations
+MAX_EXECUTION_TIME = 90  # Generous timeout for complex tasks
 
 # Memory Configuration
-MEMORY_WINDOW_SIZE = 10
+MEMORY_WINDOW_SIZE = 25  # Larger context window for better understanding
 
 # File System Configuration
 WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", "workspace")
@@ -44,8 +45,20 @@ def get_workspace_path():
 
 # Application Configuration
 APP_NAME = "AI File Assistant"
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 
-# RAG Configuration (for future use)
-VECTOR_STORE_PATH = Path("./vector_store")
+# RAG Configuration - Outside workspace to keep it clean
+RAG_CACHE_DIR = Path(".rag_cache")  # Project root, not workspace
+RAG_DB_DIR = Path(".rag_db")  # Project root, not workspace
 EMBEDDINGS_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Protected Files - App should NEVER modify these
+PROTECTED_PATTERNS = [
+    ".*",  # All hidden files/folders (starting with .)
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    ".git*",
+    ".env*",
+]

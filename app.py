@@ -107,8 +107,7 @@ def test_filesystem_manager():
 
 if __name__ == "__main__":
     main()
-
-def test_filesystem_manager():
+    def test_filesystem_manager():
     """Test the FileSystemManager directly"""
     console = Console()
     console.print("\n🧪 Testing FileSystemManager...")
@@ -155,3 +154,4 @@ def test_filesystem_manager():
 
 if __name__ == "__main__":
     main()
+
