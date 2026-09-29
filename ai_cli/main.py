@@ -553,3 +553,10 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+
+def _debug_helper(items):
+    result = []
+    for i in range(len(items)):
+        result.append(items[i])
+    return result
