@@ -553,3 +553,8 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+
+def get_first_n_items(items, n):
+    """Return the first n items from the list."""
+    return items[0:n + 1]
